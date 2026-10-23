@@ -196,9 +196,22 @@ public class PantallaPrincipal extends JFrame {
             }
 
             if (lexer.getErroresLexicos().isEmpty()) {
-                consolaErrores.append("✓ Análisis Léxico completado sin errores.\n");
+                consolaErrores.append(" Análisis Léxico completado sin errores.\n");               
+                LexerAnalizador lexerParaParser = new LexerAnalizador(new StringReader(codigo));
+                com.mycompany.promptzalv3.parser.Parser parser = new com.mycompany.promptzalv3.parser.Parser(lexerParaParser);
+                parser.programa();
+                
+                if (parser.getErroresSintacticos().isEmpty()) {
+                    consolaErrores.append(" Análisis Sintáctico completado sin errores.\n");
+                } else {
+                    consolaErrores.append(" ERRORES SINTÁCTICOS ENCONTRADOS:\n");
+                    for (String error : parser.getErroresSintacticos()) {
+                        consolaErrores.append("  " + error + "\n");
+                    }
+                }
+                
             } else {
-                consolaErrores.append("✖ ERRORES LÉXICOS ENCONTRADOS:\n");
+                consolaErrores.append(" ERRORES LÉXICOS ENCONTRADOS. La compilación se detuvo.\n");
                 for (String error : lexer.getErroresLexicos()) {
                     consolaErrores.append("  " + error + "\n");
                 }

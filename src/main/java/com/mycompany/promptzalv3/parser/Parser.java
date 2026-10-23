@@ -49,7 +49,10 @@ public class Parser {
 
     // <programa> -> <directivas> <agentes> <ejecuciones> <exportar> EOF
     public void programa() {
-        directivas();     
+        directivas();  
+        agentes();
+        ejecuciones();
+        exportar();
         match(TipoToken.EOF);
     }
 
@@ -64,7 +67,48 @@ public class Parser {
             return;
         }
     }
+    
+    // <agentes> -> <agente> <mas_agentes>
+    private void agentes() {
+        agente();
+        mas_agentes();
+    }
 
+    // <mas_agentes> -> <agente> <mas_agentes> | ε
+    private void mas_agentes() {
+        // Si el siguiente token es AGENTE, hay otro agente; si no, es epsilon (termina).
+        if (tokenActual != null && tokenActual.getTipo() == TipoToken.AGENTE) {
+            agente();
+            mas_agentes();
+        }
+    }
+
+    // <agente> -> AGENTE ID LLAVE_A <contexto> <variables> <comandos> LLAVE_C
+    private void agente() {
+        match(TipoToken.AGENTE);
+        match(TipoToken.ID);
+        match(TipoToken.LLAVE_A);
+        
+        contexto();
+        variables();
+        comandos();
+        
+        match(TipoToken.LLAVE_C);
+    }
+
+    // <contexto> -> CONTEXTO IGUAL CADENA
+    private void contexto() {
+        match(TipoToken.CONTEXTO);
+        match(TipoToken.IGUAL);
+        match(TipoToken.CADENA);
+    }
+
+    private void variables() {}
+    private void comandos() {}
+    private void ejecuciones() {}
+    private void exportar() {}
+
+    
     //Manejo de errores, pendiente el modo panico
     private void reportarError(TipoToken tipoEsperado) {
         if (tokenActual != null) {
