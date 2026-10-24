@@ -34,13 +34,14 @@ public class Parser {
     }
 
     
-    // Verificar si coincide con el token esperado
+
     private boolean match(TipoToken tipoEsperado) {
         if (tokenActual != null && tokenActual.getTipo() == tipoEsperado) {
             avanzar(); 
             return true;
         } else {
             reportarError(tipoEsperado);
+            recuperarModoPanico(); 
             return false;
         }
     }
@@ -103,13 +104,145 @@ public class Parser {
         match(TipoToken.CADENA);
     }
 
-    private void variables() {}
-    private void comandos() {}
-    private void ejecuciones() {}
-    private void exportar() {}
+    // <variables> -> VARIABLE ID IGUAL <expresion> <variables> | ε
+    private void variables() {
+        if (tokenActual != null && tokenActual.getTipo() == TipoToken.VARIABLE) {
+            match(TipoToken.VARIABLE);
+            match(TipoToken.ID);
+            match(TipoToken.IGUAL);
+            expresion();
+            variables(); 
+        }
+    }
 
     
-    //Manejo de errores, pendiente el modo panico
+    // <comandos> -> <comando> <mas_comandos>
+    private void comandos() {
+        comando();
+        mas_comandos();
+    }
+
+    
+    // <mas_comandos> -> <comando> <mas_comandos> | ε
+    private void mas_comandos() {
+        if (tokenActual != null && tokenActual.getTipo() == TipoToken.COMANDO_IA) {
+            comando();
+            mas_comandos();
+        }
+    }
+
+    
+    // <comando> -> COMANDO_IA <expresion> <conectores> FLECHA ID
+    private void comando() {
+        match(TipoToken.COMANDO_IA);
+        expresion();
+        conectores();
+        match(TipoToken.FLECHA);
+        match(TipoToken.ID);
+    }
+
+    
+    // <conectores> -> CONECTOR <expresion> <conectores> | ε
+    private void conectores() {
+        if (tokenActual != null && tokenActual.getTipo() == TipoToken.CONECTOR) {
+            match(TipoToken.CONECTOR);
+            expresion();
+            conectores();
+        }
+    }
+
+    
+    // <expresion> -> <termino> <mas_terminos>
+    private void expresion() {
+        termino();
+        mas_terminos();
+    }
+
+    
+    // <mas_terminos> -> MAS <termino> <mas_terminos> | ε
+    private void mas_terminos() {
+        if (tokenActual != null && tokenActual.getTipo() == TipoToken.MAS) {
+            match(TipoToken.MAS);
+            termino();
+            mas_terminos();
+        }
+    }
+
+    
+    // <termino> -> CADENA | ID | NUMERO <unidad> | <cargar>
+    private void termino() {
+        if (tokenActual == null) return;
+        
+        if (tokenActual.getTipo() == TipoToken.CADENA) {
+            match(TipoToken.CADENA);
+        } else if (tokenActual.getTipo() == TipoToken.ID) {
+            match(TipoToken.ID);
+        } else if (tokenActual.getTipo() == TipoToken.NUMERO) {
+            match(TipoToken.NUMERO);
+            unidad();
+        } else if (tokenActual.getTipo() == TipoToken.CARGAR) {
+            cargar();
+        } else {
+            reportarError(TipoToken.CADENA); 
+            recuperarModoPanico();
+        }
+    }
+
+    
+    // <unidad> -> ID | ε
+    private void unidad() {
+        if (tokenActual != null && tokenActual.getTipo() == TipoToken.ID) {
+            match(TipoToken.ID);
+        }
+    }
+
+    
+    // <cargar> -> CARGAR PAR_A CADENA PAR_C
+    private void cargar() {
+        match(TipoToken.CARGAR);
+        match(TipoToken.PAR_A);
+        match(TipoToken.CADENA);
+        match(TipoToken.PAR_C);
+    }
+
+    
+    // <ejecuciones> -> EJECUTAR ID <mas_ejecuciones>
+    private void ejecuciones() {
+        match(TipoToken.EJECUTAR);
+        match(TipoToken.ID);
+        mas_ejecuciones();
+    }
+
+    
+    // <mas_ejecuciones> -> EJECUTAR ID <mas_ejecuciones> | ε
+    private void mas_ejecuciones() {
+        if (tokenActual != null && tokenActual.getTipo() == TipoToken.EJECUTAR) {
+            match(TipoToken.EJECUTAR);
+            match(TipoToken.ID);
+            mas_ejecuciones();
+        }
+    }
+
+    
+    // <exportar> -> EXPORTAR ID <mas_ids>
+    private void exportar() {
+        match(TipoToken.EXPORTAR);
+        match(TipoToken.ID);
+        mas_ids();
+    }
+
+    
+    // <mas_ids> -> COMA ID <mas_ids> | ε
+    private void mas_ids() {
+        if (tokenActual != null && tokenActual.getTipo() == TipoToken.COMA) {
+            match(TipoToken.COMA);
+            match(TipoToken.ID);
+            mas_ids();
+        }
+    }
+
+   
+    //Manejo de errores
     private void reportarError(TipoToken tipoEsperado) {
         if (tokenActual != null) {
             String msj = "Error Sintáctico: Se esperaba " + tipoEsperado + 
@@ -119,4 +252,19 @@ public class Parser {
             erroresSintacticos.add(msj);
         }
     }
+    
+    private void recuperarModoPanico() {
+        avanzar();
+        
+        while (tokenActual != null && tokenActual.getTipo() != TipoToken.EOF) {
+            TipoToken t = tokenActual.getTipo();
+            if (t == TipoToken.AGENTE || t == TipoToken.LLAVE_C || 
+                t == TipoToken.COMANDO_IA || t == TipoToken.VARIABLE || 
+                t == TipoToken.EJECUTAR || t == TipoToken.EXPORTAR) {
+                break; 
+            }
+            avanzar(); 
+        }
+    }
+    
 }
