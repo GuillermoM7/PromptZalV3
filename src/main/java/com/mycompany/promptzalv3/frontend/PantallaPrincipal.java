@@ -1,8 +1,10 @@
 package com.mycompany.promptzalv3.frontend;
 
+import com.mycompany.promptzalv3.ast.Programa;
 import com.mycompany.promptzalv3.lexer.LexerAnalizador;
 import com.mycompany.promptzalv3.lexer.Token;
 import com.mycompany.promptzalv3.lexer.TipoToken;
+import com.mycompany.promptzalv3.parser.Parser;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -150,24 +152,25 @@ public class PantallaPrincipal extends JFrame {
     // Pintor
     private void aplicarResaltadoSintaxis() {
         SwingUtilities.invokeLater(() -> {
-            String texto = editorCodigo.getText();
-            StyledDocument doc = editorCodigo.getStyledDocument();
-            
-            //Color base normal
-            Style estiloBase = editorCodigo.addStyle("Base", null);
-            StyleConstants.setForeground(estiloBase, COLOR_TEXTO);
-            doc.setCharacterAttributes(0, texto.length(), estiloBase, true);
+            try {
+                StyledDocument doc = editorCodigo.getStyledDocument();
+                String texto = doc.getText(0, doc.getLength());              
+                Style estiloBase = editorCodigo.addStyle("Base", null);
+                StyleConstants.setForeground(estiloBase, COLOR_TEXTO);
+                doc.setCharacterAttributes(0, texto.length(), estiloBase, true);
 
-            //Colores por categoria
-            pintarPatron(texto, doc, "//.*|/\\*(.|\\n)*?\\*/", new Color(92, 99, 112)); // Comentarios (Gris oscuro)
-            pintarPatron(texto, doc, "\"(.*?)\"", new Color(152, 195, 121)); // Cadenas (Verde claro)
-            pintarPatron(texto, doc, "@[a-zA-Z]+", new Color(209, 154, 102)); // Directivas (Naranja)
-            pintarPatron(texto, doc, "\\b(AGENTE|contexto|variable|EJECUTAR|EXPORTAR)\\b", new Color(198, 120, 221)); // Reservadas (Morado)
-            pintarPatron(texto, doc, "\\b(PREGUNTAR|GENERAR|RESUMIR|ANALIZAR|TRADUCIR|CLASIFICAR|EXTRAER|CARGAR)\\b", new Color(97, 175, 239)); // Comandos IA (Azul)
-            pintarPatron(texto, doc, "\\b(SOBRE|DESDE|EN|COMO)\\b", new Color(229, 192, 123)); // Conectores (Amarillo)
+                pintarPatron(texto, doc, "//.*|/\\*(.|\\n)*?\\*/", new Color(92, 99, 112));
+                pintarPatron(texto, doc, "\"(.*?)\"", new Color(152, 195, 121));
+                pintarPatron(texto, doc, "@[a-zA-Z]+", new Color(209, 154, 102));
+                pintarPatron(texto, doc, "\\b(AGENTE|contexto|variable|EJECUTAR|EXPORTAR)\\b", new Color(198, 120, 221));
+                pintarPatron(texto, doc, "\\b(PREGUNTAR|GENERAR|RESUMIR|ANALIZAR|TRADUCIR|CLASIFICAR|EXTRAER|CARGAR)\\b", new Color(97, 175, 239));
+                pintarPatron(texto, doc, "\\b(SOBRE|DESDE|EN|COMO)\\b", new Color(229, 192, 123));
+            } catch (Exception e) {
+            }
         });
     }
 
+    
     private void pintarPatron(String texto, StyledDocument doc, String regex, Color color) {
         Matcher matcher = Pattern.compile(regex).matcher(texto);
         Style estilo = editorCodigo.addStyle("Estilo", null);
@@ -198,8 +201,14 @@ public class PantallaPrincipal extends JFrame {
             if (lexer.getErroresLexicos().isEmpty()) {
                 consolaErrores.append(" Análisis Léxico completado sin errores.\n");               
                 LexerAnalizador lexerParaParser = new LexerAnalizador(new StringReader(codigo));
-                com.mycompany.promptzalv3.parser.Parser parser = new com.mycompany.promptzalv3.parser.Parser(lexerParaParser);
-                parser.programa();
+                Parser parser = new Parser(lexerParaParser);
+                
+                Programa ast = parser.programa();
+                
+                if (parser.getErroresSintacticos().isEmpty()) {
+                    consolaErrores.append(" Análisis Sintáctico completado sin errores.\n");
+                    consolaErrores.append(" AST Construido con éxito. Agentes detectados: " + ast.agentes.size() + "\n");
+                }
                 
                 if (parser.getErroresSintacticos().isEmpty()) {
                     consolaErrores.append(" Análisis Sintáctico completado sin errores.\n");

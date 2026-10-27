@@ -3,6 +3,7 @@ package com.mycompany.promptzalv3.parser;
 import com.mycompany.promptzalv3.lexer.LexerAnalizador;
 import com.mycompany.promptzalv3.lexer.Token;
 import com.mycompany.promptzalv3.lexer.TipoToken;
+import com.mycompany.promptzalv3.ast.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,214 +35,276 @@ public class Parser {
     }
 
     
-
-    private boolean match(TipoToken tipoEsperado) {
+    private void match(TipoToken tipoEsperado) {
         if (tokenActual != null && tokenActual.getTipo() == tipoEsperado) {
             avanzar(); 
-            return true;
         } else {
             reportarError(tipoEsperado);
-            recuperarModoPanico(); 
-            return false;
+            throw new PanicException();
         }
     }
 
+    
+    // Motor del AST
+    private String consumir(TipoToken tipoEsperado) {
+        String lexema = "";
+        if (tokenActual != null) {
+            lexema = tokenActual.getLexema();
+        }
+        match(tipoEsperado);
+        return lexema;
+    }
+
+    
     //REGLAS!!!
 
     // <programa> -> <directivas> <agentes> <ejecuciones> <exportar> EOF
-    public void programa() {
-        directivas();  
-        agentes();
-        ejecuciones();
-        exportar();
-        match(TipoToken.EOF);
+    public Programa programa() {
+        Programa prog = new Programa(); // Nodo raíz del árbol
+        directivas(prog);  
+        agentes(prog);
+        ejecuciones(prog);
+        exportar(prog);
+        
+        try {
+            match(TipoToken.EOF);
+        } catch (PanicException e) {}
+        
+        return prog; // Devuelve el árbol completo
     }
 
+    
     // <directivas> -> DIRECTIVA CADENA <directivas> | ε
-    private void directivas() {
+    private void directivas(Programa prog) {
         if (tokenActual != null && tokenActual.getTipo() == TipoToken.DIRECTIVA) {
-            match(TipoToken.DIRECTIVA);
-            match(TipoToken.CADENA);
-            directivas();
-        }
-        else {
-            return;
+            String dir = consumir(TipoToken.DIRECTIVA);
+            String val = consumir(TipoToken.CADENA);
+            prog.directivas.add(dir + " " + val);
+            directivas(prog);
         }
     }
     
+    
     // <agentes> -> <agente> <mas_agentes>
-    private void agentes() {
-        agente();
-        mas_agentes();
+    private void agentes(Programa prog) {
+        try {
+            prog.agentes.add(agente());
+        } catch (PanicException e) {
+            recuperarModoPanico();
+        }
+        mas_agentes(prog);
     }
 
+    
     // <mas_agentes> -> <agente> <mas_agentes> | ε
-    private void mas_agentes() {
+    private void mas_agentes(Programa prog) {
         // Si el siguiente token es AGENTE, hay otro agente; si no, es epsilon (termina).
         if (tokenActual != null && tokenActual.getTipo() == TipoToken.AGENTE) {
-            agente();
-            mas_agentes();
+            agentes(prog);
         }
     }
 
+    
     // <agente> -> AGENTE ID LLAVE_A <contexto> <variables> <comandos> LLAVE_C
-    private void agente() {
+    private Agente agente() {
         match(TipoToken.AGENTE);
-        match(TipoToken.ID);
-        match(TipoToken.LLAVE_A);
-        
-        contexto();
-        variables();
-        comandos();
-        
+        int fila = tokenActual != null ? tokenActual.getFila() : 0;
+        String nombre = consumir(TipoToken.ID);
+        match(TipoToken.LLAVE_A);       
+        // Se instancia el agente y se inyectan los sub-nodos dentro de él
+        Agente ag = new Agente(nombre, fila);
+        ag.contexto = contexto();
+        variables(ag);
+        comandos(ag);       
         match(TipoToken.LLAVE_C);
+        return ag;
     }
 
+    
     // <contexto> -> CONTEXTO IGUAL CADENA
-    private void contexto() {
+    private String contexto() {
         match(TipoToken.CONTEXTO);
         match(TipoToken.IGUAL);
-        match(TipoToken.CADENA);
+        return consumir(TipoToken.CADENA);
     }
 
+    
     // <variables> -> VARIABLE ID IGUAL <expresion> <variables> | ε
-    private void variables() {
+    private void variables(Agente ag) {
         if (tokenActual != null && tokenActual.getTipo() == TipoToken.VARIABLE) {
-            match(TipoToken.VARIABLE);
-            match(TipoToken.ID);
-            match(TipoToken.IGUAL);
-            expresion();
-            variables(); 
+            try {
+                match(TipoToken.VARIABLE);
+                int fila = tokenActual != null ? tokenActual.getFila() : 0;
+                String nombre = consumir(TipoToken.ID);
+                match(TipoToken.IGUAL);
+                String[] exp = expresion();
+                ag.variables.add(new Variable(nombre, exp[0], exp[1], fila));
+            } catch (PanicException e) {
+                recuperarModoPanico();
+            }
+            variables(ag); 
         }
     }
 
     
     // <comandos> -> <comando> <mas_comandos>
-    private void comandos() {
-        comando();
-        mas_comandos();
+    private void comandos(Agente ag) {
+        try {
+            ag.comandos.add(comando());
+        } catch (PanicException e) {
+            recuperarModoPanico();
+        }
+        mas_comandos(ag);
     }
 
     
     // <mas_comandos> -> <comando> <mas_comandos> | ε
-    private void mas_comandos() {
+    private void mas_comandos(Agente ag) {
         if (tokenActual != null && tokenActual.getTipo() == TipoToken.COMANDO_IA) {
-            comando();
-            mas_comandos();
+            comandos(ag);
         }
     }
-
+    
     
     // <comando> -> COMANDO_IA <expresion> <conectores> FLECHA ID
-    private void comando() {
-        match(TipoToken.COMANDO_IA);
-        expresion();
-        conectores();
+    private Comando comando() {
+        int fila = tokenActual != null ? tokenActual.getFila() : 0;
+        String op = consumir(TipoToken.COMANDO_IA);
+        Comando cmd = new Comando(op, fila);
+        
+        String[] exp = expresion();
+        cmd.parametroPrincipal = exp[0];
+        conectores(cmd);
+        
         match(TipoToken.FLECHA);
-        match(TipoToken.ID);
+        cmd.variableDestino = consumir(TipoToken.ID);
+        return cmd;
     }
-
+    
     
     // <conectores> -> CONECTOR <expresion> <conectores> | ε
-    private void conectores() {
+    private void conectores(Comando cmd) {
         if (tokenActual != null && tokenActual.getTipo() == TipoToken.CONECTOR) {
-            match(TipoToken.CONECTOR);
-            expresion();
-            conectores();
+            String tipo = consumir(TipoToken.CONECTOR);
+            String[] exp = expresion();
+            cmd.conectores.add(new Conector(tipo, exp[0]));
+            conectores(cmd);
         }
     }
 
     
     // <expresion> -> <termino> <mas_terminos>
-    private void expresion() {
-        termino();
-        mas_terminos();
+    // Devuelve un arreglo [0]=Valor compuesto, [1]=Tipo base para facilitar la validación semántica
+    private String[] expresion() {
+        String[] term = termino();
+        String mas = mas_terminos();
+        if (!mas.isEmpty()) {
+            term[0] = term[0] + mas;
+            term[1] = "EXPRESION_COMPUESTA";
+        }
+        return term;
     }
 
     
     // <mas_terminos> -> MAS <termino> <mas_terminos> | ε
-    private void mas_terminos() {
+    private String mas_terminos() {
         if (tokenActual != null && tokenActual.getTipo() == TipoToken.MAS) {
             match(TipoToken.MAS);
-            termino();
-            mas_terminos();
+            String[] t = termino();
+            String mt = mas_terminos();
+            return " + " + t[0] + mt;
         }
+        return "";
     }
 
     
     // <termino> -> CADENA | ID | NUMERO <unidad> | <cargar>
-    private void termino() {
-        if (tokenActual == null) return;
+    private String[] termino() {
+        String[] res = new String[]{"", ""};
+        if (tokenActual == null) return res;
         
         if (tokenActual.getTipo() == TipoToken.CADENA) {
-            match(TipoToken.CADENA);
+            res[0] = consumir(TipoToken.CADENA);
+            res[1] = "CADENA";
         } else if (tokenActual.getTipo() == TipoToken.ID) {
-            match(TipoToken.ID);
+            res[0] = consumir(TipoToken.ID);
+            res[1] = "ID";
         } else if (tokenActual.getTipo() == TipoToken.NUMERO) {
-            match(TipoToken.NUMERO);
-            unidad();
+            String num = consumir(TipoToken.NUMERO);
+            String un = unidad();
+            res[0] = num + (un.isEmpty() ? "" : " " + un);
+            res[1] = "NUMERO";
         } else if (tokenActual.getTipo() == TipoToken.CARGAR) {
-            cargar();
+            res = cargar();
         } else {
             reportarError(TipoToken.CADENA); 
-            recuperarModoPanico();
+            throw new PanicException();
         }
+        return res;
     }
 
     
     // <unidad> -> ID | ε
-    private void unidad() {
+    private String unidad() {
         if (tokenActual != null && tokenActual.getTipo() == TipoToken.ID) {
-            match(TipoToken.ID);
+            return consumir(TipoToken.ID);
         }
+        return "";
     }
 
     
     // <cargar> -> CARGAR PAR_A CADENA PAR_C
-    private void cargar() {
+    private String[] cargar() {
         match(TipoToken.CARGAR);
         match(TipoToken.PAR_A);
-        match(TipoToken.CADENA);
+        String arch = consumir(TipoToken.CADENA);
         match(TipoToken.PAR_C);
+        return new String[]{arch, "CARGAR"};
     }
-
+    
     
     // <ejecuciones> -> EJECUTAR ID <mas_ejecuciones>
-    private void ejecuciones() {
-        match(TipoToken.EJECUTAR);
-        match(TipoToken.ID);
-        mas_ejecuciones();
+    private void ejecuciones(Programa prog) {
+        try {
+            match(TipoToken.EJECUTAR);
+            prog.ejecuciones.add(consumir(TipoToken.ID));
+        } catch (PanicException e) {
+            recuperarModoPanico();
+        }
+        mas_ejecuciones(prog);
     }
 
     
     // <mas_ejecuciones> -> EJECUTAR ID <mas_ejecuciones> | ε
-    private void mas_ejecuciones() {
+    private void mas_ejecuciones(Programa prog) {
         if (tokenActual != null && tokenActual.getTipo() == TipoToken.EJECUTAR) {
-            match(TipoToken.EJECUTAR);
-            match(TipoToken.ID);
-            mas_ejecuciones();
+            ejecuciones(prog);
         }
     }
 
     
     // <exportar> -> EXPORTAR ID <mas_ids>
-    private void exportar() {
-        match(TipoToken.EXPORTAR);
-        match(TipoToken.ID);
-        mas_ids();
+    private void exportar(Programa prog) {
+        try {
+            match(TipoToken.EXPORTAR);
+            prog.exportaciones.add(consumir(TipoToken.ID));
+            mas_ids(prog);
+        } catch (PanicException e) {
+            recuperarModoPanico();
+        }
     }
 
     
     // <mas_ids> -> COMA ID <mas_ids> | ε
-    private void mas_ids() {
+    private void mas_ids(Programa prog) {
         if (tokenActual != null && tokenActual.getTipo() == TipoToken.COMA) {
             match(TipoToken.COMA);
-            match(TipoToken.ID);
-            mas_ids();
+            prog.exportaciones.add(consumir(TipoToken.ID));
+            mas_ids(prog);
         }
     }
 
-   
+    
     //Manejo de errores
     private void reportarError(TipoToken tipoEsperado) {
         if (tokenActual != null) {
@@ -253,9 +316,8 @@ public class Parser {
         }
     }
     
+    
     private void recuperarModoPanico() {
-        avanzar();
-        
         while (tokenActual != null && tokenActual.getTipo() != TipoToken.EOF) {
             TipoToken t = tokenActual.getTipo();
             if (t == TipoToken.AGENTE || t == TipoToken.LLAVE_C || 
@@ -265,6 +327,8 @@ public class Parser {
             }
             avanzar(); 
         }
-    }
+    }  
+    
+    private class PanicException extends RuntimeException {}
     
 }
