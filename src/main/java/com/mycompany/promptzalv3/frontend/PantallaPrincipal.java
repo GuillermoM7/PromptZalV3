@@ -1,6 +1,7 @@
 package com.mycompany.promptzalv3.frontend;
 
 import com.mycompany.promptzalv3.ast.Programa;
+import com.mycompany.promptzalv3.generador.GeneradorPrompt;
 import com.mycompany.promptzalv3.lexer.LexerAnalizador;
 import com.mycompany.promptzalv3.lexer.Token;
 import com.mycompany.promptzalv3.lexer.TipoToken;
@@ -224,7 +225,11 @@ public class PantallaPrincipal extends JFrame {
                             consolaErrores.append("  " + s.toString() + "\n");
                         }
                         
-                        // Fasae final P
+                        // Fasae de Generacion
+                        GeneradorPrompt generador = new GeneradorPrompt();
+                        String promptFinal = generador.generar(ast);
+                        vistaPrompt.setText(promptFinal);
+                        consolaErrores.append("\n✓ PromptZal generado exitosamente en el panel derecho.\n");
                         
                     } else {
                         consolaErrores.append("ERRORES SEMÁNTICOS ENCONTRADOS:\n");
