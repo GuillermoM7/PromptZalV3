@@ -1,11 +1,11 @@
 package com.mycompany.promptzalv3.frontend;
 
 import com.mycompany.promptzalv3.ast.Programa;
-import com.mycompany.promptzalv3.generador.GeneradorPrompt;
 import com.mycompany.promptzalv3.lexer.LexerAnalizador;
 import com.mycompany.promptzalv3.lexer.Token;
 import com.mycompany.promptzalv3.lexer.TipoToken;
 import com.mycompany.promptzalv3.parser.Parser;
+import java.util.List;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -29,6 +29,13 @@ public class PantallaPrincipal extends JFrame {
     private final Color COLOR_TEXTO = new Color(212, 212, 212);
     private final Color COLOR_CONSOLA = new Color(45, 45, 45);
     private final Font FUENTE_CODIGO = new Font("Consolas", Font.PLAIN, 15);
+    
+    // Datos de la última compilación para los reportes
+    private List<String> ultimosErrLex = new java.util.ArrayList<>();
+    private List<String> ultimosErrSin = new java.util.ArrayList<>();
+    private List<String> ultimosErrSem = new java.util.ArrayList<>();
+    private Programa ultimoAST = null;
+    private List<com.mycompany.promptzalv3.semantico.Simbolo> ultimaTablaSimbolos = new java.util.ArrayList<>();
 
     
     public PantallaPrincipal() {
@@ -47,24 +54,31 @@ public class PantallaPrincipal extends JFrame {
 
     
     private void inicializarComponentes() {
-        //botones y herramientas
-        JPanel panelSuperior = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        panelSuperior.setBackground(new Color(60, 63, 65));
+        //Barra de Herramientas (Botones)
+        JPanel panelSuperior = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        panelSuperior.setBackground(new Color(43, 45, 48)); 
         
-        JButton btnAbrir = crearBoton(" Abrir .pz", new Color(66, 133, 244));
-        JButton btnGuardar = crearBoton(" Guardar .pz", new Color(66, 133, 244));
-        JButton btnCompilar = crearBoton(" Compilar", new Color(76, 175, 80));
+        JButton btnAbrir = crearBoton("Abrir .pz", new Color(66, 133, 244));
+        JButton btnGuardar = crearBoton("Guardar .pz", new Color(66, 133, 244));
+        JButton btnCompilar = crearBoton("Compilar", new Color(76, 175, 80));
+        JButton btnReportes = crearBoton("Reportes HTML", new Color(230, 124, 115));
+        JButton btnAST = crearBoton("Ver AST", new Color(156, 39, 176)); 
         
         btnAbrir.addActionListener(e -> abrirArchivo());
         btnGuardar.addActionListener(e -> guardarArchivo());
         btnCompilar.addActionListener(e -> ejecutarCompilador());
+        btnReportes.addActionListener(e -> generarReportesTablas());
+        btnAST.addActionListener(e -> generarReporteAST());
         
         panelSuperior.add(btnAbrir);
         panelSuperior.add(btnGuardar);
         panelSuperior.add(btnCompilar);
+        panelSuperior.add(btnReportes);
+        panelSuperior.add(btnAST);
+        
         add(panelSuperior, BorderLayout.NORTH);
 
-        //Colores
+        
         editorCodigo = new JTextPane();
         editorCodigo.setBackground(COLOR_FONDO);
         editorCodigo.setForeground(COLOR_TEXTO);
@@ -72,16 +86,11 @@ public class PantallaPrincipal extends JFrame {
         editorCodigo.setFont(FUENTE_CODIGO);
         editorCodigo.setMargin(new Insets(10, 10, 10, 10));
         editorCodigo.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e) { 
-                aplicarResaltadoSintaxis(); 
-            }
-            @Override public void removeUpdate(DocumentEvent e) {
-                aplicarResaltadoSintaxis(); 
-            }
+            @Override public void insertUpdate(DocumentEvent e) { aplicarResaltadoSintaxis(); }
+            @Override public void removeUpdate(DocumentEvent e) { aplicarResaltadoSintaxis(); }
             @Override public void changedUpdate(DocumentEvent e) { }
         });
         
-        //Panel de consola y promt
         vistaPrompt = new JTextArea("# Prompt final generado...\n\n(Se mostrará al compilar)");
         vistaPrompt.setEditable(false);
         vistaPrompt.setBackground(new Color(40, 44, 52));
@@ -94,7 +103,6 @@ public class PantallaPrincipal extends JFrame {
         consolaErrores.setEditable(false);
         consolaErrores.setFont(FUENTE_CODIGO);
 
-        //Paneles Split
         JSplitPane splitSuperior = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(editorCodigo), new JScrollPane(vistaPrompt));
         splitSuperior.setResizeWeight(0.6);
         splitSuperior.setDividerSize(5);
@@ -112,7 +120,12 @@ public class PantallaPrincipal extends JFrame {
         btn.setBackground(colorFondo);
         btn.setForeground(Color.WHITE);
         btn.setFocusPainted(false);
-        btn.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        btn.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        btn.setOpaque(true);
+        btn.setBorderPainted(false); 
+        btn.setMargin(new Insets(5, 15, 5, 15));
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        
         return btn;
     }
 
@@ -182,7 +195,7 @@ public class PantallaPrincipal extends JFrame {
     }
 
 
-    private void ejecutarCompilador() {
+private void ejecutarCompilador() {
         consolaErrores.setText("Iniciando compilación...\n");
         String codigo = editorCodigo.getText();
         
@@ -192,13 +205,20 @@ public class PantallaPrincipal extends JFrame {
         }
 
         try {
-            //Fase lexica
+            // Limpiar datos de compilaciones anteriores por seguridad antes de empezar
+            ultimoAST = null;
+            if (ultimosErrSin != null) ultimosErrSin.clear();
+            if (ultimosErrSem != null) ultimosErrSem.clear();
+            if (ultimaTablaSimbolos != null) ultimaTablaSimbolos.clear();
+
+            // Fase lexica
             LexerAnalizador lexer = new LexerAnalizador(new StringReader(codigo));
             Token token = lexer.yylex();
             
             while (token != null && token.getTipo() != TipoToken.EOF) {
                 token = lexer.yylex();
             }
+            ultimosErrLex = lexer.getErroresLexicos();
 
             if (lexer.getErroresLexicos().isEmpty()) {
                 consolaErrores.append("Análisis Léxico completado sin errores.\n");
@@ -209,6 +229,9 @@ public class PantallaPrincipal extends JFrame {
                 
                 Programa ast = parser.programa();
                 
+                ultimoAST = ast;
+                ultimosErrSin = parser.getErroresSintacticos();
+                
                 // Si la gramática es correcta, se valida la logica
                 if (parser.getErroresSintacticos().isEmpty()) {
                     consolaErrores.append("Análisis Sintáctico completado sin errores.\n");
@@ -218,6 +241,9 @@ public class PantallaPrincipal extends JFrame {
                     com.mycompany.promptzalv3.semantico.AnalizadorSemantico semantico = new com.mycompany.promptzalv3.semantico.AnalizadorSemantico();
                     semantico.analizar(ast); 
                     
+                    ultimosErrSem = semantico.getErroresSemanticos();
+                    ultimaTablaSimbolos = semantico.getTablaSimbolos();
+                    
                     if (semantico.getErroresSemanticos().isEmpty()) {
                         consolaErrores.append("Análisis Semántico completado. Lógica válida.\n");
                         consolaErrores.append("\n--- TABLA DE SÍMBOLOS GENERADA ---\n");
@@ -225,8 +251,8 @@ public class PantallaPrincipal extends JFrame {
                             consolaErrores.append("  " + s.toString() + "\n");
                         }
                         
-                        // Fasae de Generacion
-                        GeneradorPrompt generador = new GeneradorPrompt();
+                        // Fase de Generacion
+                        com.mycompany.promptzalv3.generador.GeneradorPrompt generador = new com.mycompany.promptzalv3.generador.GeneradorPrompt();
                         String promptFinal = generador.generar(ast);
                         vistaPrompt.setText(promptFinal);
                         consolaErrores.append("\n✓ PromptZal generado exitosamente en el panel derecho.\n");
@@ -266,4 +292,29 @@ public class PantallaPrincipal extends JFrame {
             new PantallaPrincipal().setVisible(true);
         });
     }
+    
+    
+    private void generarReportesTablas() {
+        com.mycompany.promptzalv3.reportes.GeneradorReportes gen = new com.mycompany.promptzalv3.reportes.GeneradorReportes();
+        gen.generarReporteErrores(ultimosErrLex, ultimosErrSin, ultimosErrSem);
+        
+        if (ultimaTablaSimbolos != null && !ultimaTablaSimbolos.isEmpty()) {
+            gen.generarTablaSimbolos(ultimaTablaSimbolos);
+            JOptionPane.showMessageDialog(this, "Reportes HTML guardados exitosamente en la carpeta 'Reportes'.", "Reportes Generados", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this, "Se generó el reporte de errores, pero la tabla de símbolos está vacía.", "Aviso", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    
+    private void generarReporteAST() {
+        if (ultimoAST != null) {
+            com.mycompany.promptzalv3.reportes.GeneradorReportes gen = new com.mycompany.promptzalv3.reportes.GeneradorReportes();
+            gen.generarReporteAST(ultimoAST);
+            JOptionPane.showMessageDialog(this, "Árbol AST (.dot, .png y .html) guardado en la carpeta 'Reportes'.", "AST Generado", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this, "No hay un AST en memoria. Compila un código sintácticamente válido primero.", "AST no disponible", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+    
 }

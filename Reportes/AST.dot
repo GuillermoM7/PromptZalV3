@@ -1,0 +1,25 @@
+digraph AST {
+  node [shape=box, style="rounded,filled", fontname="Arial", color="#3b82f6", fillcolor="#eff6ff"];
+  edge [color="#94a3b8"];
+  n0 [label="Programa", fillcolor="#1e293b", fontcolor="white"];
+  n1 [label="Directiva\n@modelo \"claude-sonnet-4-6\"", fillcolor="#fef08a"];
+  n0 -> n1;
+  n2 [label="Directiva\n@rol \"analista de datos\"", fillcolor="#fef08a"];
+  n0 -> n2;
+  n3 [label="Directiva\n@formato \"markdown\"", fillcolor="#fef08a"];
+  n0 -> n3;
+  n4 [label="Agente: analista", fillcolor="#c084fc"];
+  n0 -> n4;
+  n5 [label="Contexto\n\"Eres un analista de datos experto\""];
+  n4 -> n5;
+  n6 [label="Variable: ventas\n(CARGAR)"];
+  n4 -> n6;
+  n7 [label="Comando: PREGUNTAR\nDestino: tendencias", fillcolor="#86efac"];
+  n4 -> n7;
+  n8 [label="Comando: RESUMIR\nDestino: resumen", fillcolor="#86efac"];
+  n4 -> n8;
+  n9 [label="Ejecutar: analista", fillcolor="#fca5a5"];
+  n0 -> n9;
+  n10 [label="Exportar: resumen", fillcolor="#fca5a5"];
+  n0 -> n10;
+}
