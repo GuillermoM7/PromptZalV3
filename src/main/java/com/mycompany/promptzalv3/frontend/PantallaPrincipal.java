@@ -191,6 +191,7 @@ public class PantallaPrincipal extends JFrame {
         }
 
         try {
+            //Fase lexica
             LexerAnalizador lexer = new LexerAnalizador(new StringReader(codigo));
             Token token = lexer.yylex();
             
@@ -199,28 +200,48 @@ public class PantallaPrincipal extends JFrame {
             }
 
             if (lexer.getErroresLexicos().isEmpty()) {
-                consolaErrores.append(" Análisis Léxico completado sin errores.\n");               
+                consolaErrores.append("Análisis Léxico completado sin errores.\n");
+                
+                // Fase sintactica y AST
                 LexerAnalizador lexerParaParser = new LexerAnalizador(new StringReader(codigo));
                 Parser parser = new Parser(lexerParaParser);
                 
                 Programa ast = parser.programa();
                 
+                // Si la gramática es correcta, se valida la logica
                 if (parser.getErroresSintacticos().isEmpty()) {
-                    consolaErrores.append(" Análisis Sintáctico completado sin errores.\n");
-                    consolaErrores.append(" AST Construido con éxito. Agentes detectados: " + ast.agentes.size() + "\n");
-                }
-                
-                if (parser.getErroresSintacticos().isEmpty()) {
-                    consolaErrores.append(" Análisis Sintáctico completado sin errores.\n");
+                    consolaErrores.append("Análisis Sintáctico completado sin errores.\n");
+                    consolaErrores.append("AST Construido con éxito. Agentes detectados: " + ast.agentes.size() + "\n");
+                    
+                    //Fase semantica
+                    com.mycompany.promptzalv3.semantico.AnalizadorSemantico semantico = new com.mycompany.promptzalv3.semantico.AnalizadorSemantico();
+                    semantico.analizar(ast); 
+                    
+                    if (semantico.getErroresSemanticos().isEmpty()) {
+                        consolaErrores.append("Análisis Semántico completado. Lógica válida.\n");
+                        consolaErrores.append("\n--- TABLA DE SÍMBOLOS GENERADA ---\n");
+                        for (com.mycompany.promptzalv3.semantico.Simbolo s : semantico.getTablaSimbolos()) {
+                            consolaErrores.append("  " + s.toString() + "\n");
+                        }
+                        
+                        // Fasae final P
+                        
+                    } else {
+                        consolaErrores.append("ERRORES SEMÁNTICOS ENCONTRADOS:\n");
+                        for (String error : semantico.getErroresSemanticos()) {
+                            consolaErrores.append("  " + error + "\n");
+                        }
+                    }
+
                 } else {
-                    consolaErrores.append(" ERRORES SINTÁCTICOS ENCONTRADOS:\n");
+                    consolaErrores.append("ERRORES SINTÁCTICOS ENCONTRADOS:\n");
                     for (String error : parser.getErroresSintacticos()) {
                         consolaErrores.append("  " + error + "\n");
                     }
                 }
                 
             } else {
-                consolaErrores.append(" ERRORES LÉXICOS ENCONTRADOS. La compilación se detuvo.\n");
+                consolaErrores.append("ERRORES LÉXICOS ENCONTRADOS. La compilación se detuvo.\n");
                 for (String error : lexer.getErroresLexicos()) {
                     consolaErrores.append("  " + error + "\n");
                 }
